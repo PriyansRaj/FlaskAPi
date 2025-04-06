@@ -1,48 +1,66 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
-# Serve static folder (for index.html)
+from database import SessionLocal, engine, Base
+from models import Todo
 
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-class Todo(BaseModel):
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+class TodoSchema(BaseModel):
     id: int
-    title:str
+    title: str
     completed: bool
 
-todo_list: List[Todo] =[]
+    class Config:
+        orm_mode = True
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/")
 def serve_frontend():
     return FileResponse("static/index.html")
-@app.get("/")
-def home():
-    return {"message":"Welcome to the Todo "}
 
-@app.get("/todos",response_model=List[Todo])
-def get_all_todos():
-    return todo_list
 
-@app.post("/todos",response_model=Todo)
-def create_todo(todo:Todo):
-    todo_list.append(todo)
+@app.get("/todos", response_model=List[TodoSchema])
+def get_all_todos(db: Session = Depends(get_db)):
+    return db.query(Todo).all()
+
+
+@app.post("/todos", response_model=TodoSchema)
+def create_todo(todo: TodoSchema, db: Session = Depends(get_db)):
+    db_todo = Todo(**todo.dict())
+    db.add(db_todo)
+    db.commit()
+    db.refresh(db_todo)
+    return db_todo
+
+@app.get("/todos/{todo_id}", response_model=TodoSchema)
+def get_todo(todo_id: int, db: Session = Depends(get_db)):
+    todo = db.query(Todo).filter(Todo.id == todo_id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
     return todo
 
-@app.get("/todos/{todo_id}",response_model=Todo)
-def get_todo(todo_int:int):
-    for todo in todo_list:
-        if todo.id == todo_int:
-            return todo
-    raise HTTPException(status_code=404, detail="Todo not found")
-
 @app.delete("/todos/{todo_id}")
-def delete_todo(todo_id:int):
-    for i,todo in enumerate(todo_list):
-        if todo.id ==todo_id:
-            del todo_list[i]
-            return {"message": "Todo deleted successfully"}
-    raise HTTPException(status_code=404, detail="Todo not found")
+def delete_todo(todo_id: int, db: Session = Depends(get_db)):
+    todo = db.query(Todo).filter(Todo.id == todo_id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    db.delete(todo)
+    db.commit()
+    return {"message": "Todo deleted successfully"}
