@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FastAPI ToDo App</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+    input, button { margin: 0.5rem 0; padding: 0.5rem; }
+    li { margin: 0.3rem 0; }
+  </style>
+</head>
+<body>
+  <h1>📝 FastAPI ToDo App</h1>
+
+  <input type="text" id="title" placeholder="Enter task" />
+  <button onclick="addTodo()">Add ToDo</button>
+
+  <ul id="todo-list"></ul>
+
+  <script>
+    async function fetchTodos() {
+      const res = await fetch('/todos');
+      const todos = await res.json();
+      const list = document.getElementById('todo-list');
+      list.innerHTML = '';
+      todos.forEach(todo => {
+        const item = document.createElement('li');
+        item.innerHTML = `${todo.title} - ${todo.completed ? '✅' : '❌'}
+          <button onclick="deleteTodo(${todo.id})">Delete</button>`;
+        list.appendChild(item);
+      });
+    }
+
+    async function addTodo() {
+      const title = document.getElementById('title').value;
+      const id = Math.floor(Math.random() * 10000); // Temporary ID
+      const res = await fetch('/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title, completed: false })
+      });
+      document.getElementById('title').value = '';
+      fetchTodos();
+    }
+
+    async function deleteTodo(id) {
+      await fetch(`/todos/${id}`, { method: 'DELETE' });
+      fetchTodos();
+    }
+
+    fetchTodos();
+  </script>
+</body>
+</html>
